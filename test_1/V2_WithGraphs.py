@@ -13,12 +13,12 @@ from IPython import display
 import numpy as np
 import plotly as plot
 
-csv_file = r"C:\Users\chh03\SMWE\Ops Data and Supply Analytics - Analytics and Items Team Workflow\Reporting\VR_Workflow\Scenario_2_Start_Base_Numbers_RC.csv"
+csv_file = r"C:\Users\chh03\SMWE\Ops Data and Supply Analytics - Supply Planning and Analytics\Reporting\VR_Workflow\BaseDataFormat_Input_01.06.2026 CV.csv"
 df = pd.read_csv(csv_file)
 df.fillna(0, inplace=True)
 
 base_path = Path('C:/Users/chh03/SMWE/Ops Data and Supply Analytics - Analytics and Items Team Workflow/Reporting/VR_Workflow/Finished_Data')
-folder_name = f'Bulk_Wine_2_Base_Give_Back'
+folder_name = f'FInal_Sales_Plan_Output_V1'
 varietal_subfolder = f'Varietal'
 brand_subfolder = f'Brand'
 
@@ -118,7 +118,7 @@ df.insert(df.columns.get_loc('Month_add') + 1, 'Current_date', pd.to_datetime(cu
 
 #Main Loop - iterates through each row, and for each row iterates through each sales year, and for each sales year iterates through the inventory years starting at the current sales year.
 for row in df.itertuples():
-    print(row)
+    # print(row)
     if row.Status == "Active":
         indexer = 0 # controls skipping columns that have already been utilized
         inventory_utilized = 0 #inventory that has been decremented by sales, and is being passed to the next sales year, or removed as already utilized
@@ -545,9 +545,11 @@ for future_col in future_bulk:
     barrel_multiplier = 23
     
     create_non_vintage_for_subtraction = df[f'{future_col}'].astype(float) * (df['nv_perc']/100).astype(float)
+    create_bulk_for_subtraction = df[f'{future_col}'].astype(float) * (df['bulk_percentage']/100).astype(float)
     grape_fce_need = df[future_col].astype(float) - create_non_vintage_for_subtraction.astype(float)
     df.insert(get_index +1, f'NV_Use_Up_{year}', create_non_vintage_for_subtraction.astype(int))
-    df.insert(get_index +2, f'Grape_Need_{year}', grape_fce_need.astype(int))
+    df.insert(get_index +2, f'Bulk_Need_{year}', create_bulk_for_subtraction.astype(int))
+    df.insert(get_index +3, f'Grape_Need_{year}', grape_fce_need.astype(int))
     adjunct_calc_fce = df[f'Grape_Need_{year}'] * (df['adjunct_percentage']/100)
     barrel_calc_fce = df[f'Grape_Need_{year}'] * (df['barrel_percentage']/100)
     barrel_calc_bbl = (df[f'Grape_Need_{year}'] * (df['barrel_percentage']/100))/barrel_multiplier
@@ -561,16 +563,16 @@ for future_col in future_bulk:
     def cull_creator():
         pass
     
-    df.insert(get_index +3, f'Total_Barrel_FCE_Need_{year}', barrel_calc_fce.astype(int))
-    df.insert(get_index +4, f'Total_Barrel_BBL_Need_{year}', barrel_calc_bbl.astype(int))
-    df.insert(get_index +5, f'FO_BBL_Need_{year}', fo_calc_bbl.astype(int))
-    df.insert(get_index +6, f'AO_BBL_Need_{year}', ao_calc_bbl.astype(int))
-    df.insert(get_index +7, f'Neutral_BBL_Need_{year}', neutral_calc_bbl.astype(int))
-    df.insert(get_index +8, f'Insert_Barrel_FCE_Need_{year}', insert_calc_fce.astype(int))
-    df.insert(get_index +9, f'Insert_Barrel_BBL_Need_{year}', insert_calc_bbl.astype(int))
-    df.insert(get_index +10, f'Stainless_FCE_Need_{year}', stainless_calc_fce.astype(int))
-    df.insert(get_index +11, f'Adjunct_FCE_Need_{year}', adjunct_calc_fce.astype(int))
-    df.insert(get_index +12, f'Block_FCE_Need_{year}', block_adjunct_fce.astype(int))
+    df.insert(get_index +4, f'Total_Barrel_FCE_Need_{year}', barrel_calc_fce.astype(int))
+    df.insert(get_index +5, f'Total_Barrel_BBL_Need_{year}', barrel_calc_bbl.astype(int))
+    df.insert(get_index +6, f'FO_BBL_Need_{year}', fo_calc_bbl.astype(int))
+    df.insert(get_index +7, f'AO_BBL_Need_{year}', ao_calc_bbl.astype(int))
+    df.insert(get_index +8, f'Neutral_BBL_Need_{year}', neutral_calc_bbl.astype(int))
+    df.insert(get_index +9, f'Insert_Barrel_FCE_Need_{year}', insert_calc_fce.astype(int))
+    df.insert(get_index +10, f'Insert_Barrel_BBL_Need_{year}', insert_calc_bbl.astype(int))
+    df.insert(get_index +11, f'Stainless_FCE_Need_{year}', stainless_calc_fce.astype(int))
+    df.insert(get_index +12, f'Adjunct_FCE_Need_{year}', adjunct_calc_fce.astype(int))
+    df.insert(get_index +13, f'Block_FCE_Need_{year}', block_adjunct_fce.astype(int))
 
 
     
@@ -967,3 +969,5 @@ display.display(df_report_tons)
 # dfwio['Tons_Anticipated'] = dfwio['Contract Acres'] * dfwio['Committed TPA 2026']
 
 # dfwio.groupby(['Contract Expires After'])[['Tons_Anticipated']].sum()
+
+
