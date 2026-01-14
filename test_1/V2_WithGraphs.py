@@ -117,215 +117,44 @@ df.insert(df.columns.get_loc('Month_add') + 1, 'Current_date', pd.to_datetime(cu
 
 
 #Main Loop - iterates through each row, and for each row iterates through each sales year, and for each sales year iterates through the inventory years starting at the current sales year.
-for row in df.itertuples():
-    # print(row)
-    if row.Status == "Active":
-        indexer = 0 # controls skipping columns that have already been utilized
-        inventory_utilized = 0 #inventory that has been decremented by sales, and is being passed to the next sales year, or removed as already utilized
-        inventory_carryover = 0 #inventory carried forward from one year to the next that needs to be divided by the monthly sales value
-        sales_carryover = 0 #This is currently the difference between the samles value and the inventory value - carried forwardw as a variable so that it can be removed from the next inventory value.
-        months_stored = 0
-        total_sales = 0
-        total_inventory = 0
-        for sal_col in sales_plan_cols:
-            current_year = year_var
-            sale_year = create_year_string(sal_col)
-            if current_year == sale_year:
-                balance_of_months = 12 - current_year.month
-                remaining_year_proportion = balance_of_months/12
-                sale_value = getattr(row, sal_col)
-                total_sales += sale_value
-                monthly_sale_value = sale_value / 12
-                sale_value = sale_value*remaining_year_proportion
-            else:
-                sale_value = getattr(row, sal_col)
-                total_sales += sale_value
-                monthly_sale_value = sale_value / 12
-            if sale_value == 0:
-                break
-            for col in inv_plan_cols[indexer:]:
-                year = create_year_string(col)
-                inv_value = getattr(row, col)
-                print(f'inv value: {inv_value}')
-                total_inventory += inv_value
-                print(f'sales carryover: {sales_carryover}, inventory_carryover: {inventory_carryover} entering loop with Sales_Plan index: {sales_plan_cols.index(sal_col)}, inventory: {inv_value}, sales: {sale_value}, monthly_sales: {monthly_sale_value} row: {row.Index} and {col} - indexer: {indexer}, months_stored: {months_stored}')
-                if inv_value == 0: # good
-                    months_stored = int(inv_value)
-                    #This sets all items that are 0 bulk to 0 inventory runout.
-                    df.loc[row.Index, f'Runout_Months_{year}'] = months_stored
-                    print(f'Setting row: {row.Index} to {months_stored} for {year}')
-                    months_stored = 0
-                    indexer += 1
-                    
-                elif (inventory_carryover == 0) and (sales_carryover == 0):
-                    #This logic handles issues at the beginning of the loop for inventory where there is no carryover.
-                    take_value = min(sale_value, inv_value) #(101, 70)
-                    sales_difference = sale_value - take_value #31 = 101 - 70
-                    inventory_difference = inv_value - take_value #0 = 70 - 70
-                    
-                    if (sales_difference == 0) and (inventory_difference == 0):
-                        #This is the case where there is no sales difference and no inventory difference.
-                        months_stored = inv_value/(monthly_sale_value)
-                        df.loc[row.Index, f'Runout_Months_{year}'] = months_stored
-                        print(f'Setting row: {row.Index} to {months_stored} for {year}, monthly sale value: {monthly_sale_value}')
-                        inventory_utilized = 0
-                        inventory_carryover = 0
-                        sales_carryover = 0
-                        months_stored = 0
-                        indexer += 1
-                        break
-                    
-                    if sales_difference == 0:
-                        #more inventory than sales - need to pass the utilized sales and the sales remaining to the next year.   This is currently being handled by the inventory utilized variable.
-                        months_stored += sale_value/(monthly_sale_value) # should be 12 months
-                        print(f"more inventory than sales! - storing {months_stored} months")
-                        inventory_carryover = inventory_difference # need this to be divided by the next sales_plan
-                        print(f"row: {row.Index}, inventory col: {col}, sale col: {sal_col}, inventory_carryover: {inventory_carryover}, months_stored: {months_stored}")
-                        break
-                    
-                    if inventory_difference == 0:
-                        #more sales than inventory
-                        months_stored = int(inv_value/(monthly_sale_value)) # should be 12 months
-                        df.loc[row.Index, f'Runout_Months_{year}'] = months_stored
-                        inventory_utilized = 0
-                        inventory_carryover = 0
-                        sales_carryover = sales_difference
-                        print(f'Setting row: {row.Index} to {months_stored} for {year}, monthly sale value: {monthly_sale_value}')
-                        months_stored = 0
-                        indexer += 1
-                
-                elif (inventory_carryover == 0) and (sales_carryover != 0):
-                    take_value = min(sales_carryover, inv_value) #(56, 50)
-                    sales_difference = sales_carryover - take_value #(56 - 50) = 11
-                    inventory_difference = inv_value - take_value #0 = 50 - 50
-                    
-                    if sales_difference == 0:
-                        print(f"sales loop for test: entering loop with sale col {sales_plan_cols.index(sal_col)}, sales: {sale_value}, row: {row.Index} and {col} - indexer: {indexer}")
-                        months_stored = sales_carryover/(monthly_sale_value) # should be 12 months
-                        inventory_carryover = inventory_difference # need this to be divided by the next sales_plan
-                        sales_carryover = 0
-                        break
-                    
-                    if inventory_difference == 0:
-                        result = int(inv_value/(monthly_sale_value))
-                        df.loc[row.Index, f'Runout_Months_{year}'] = result
-                        print(f'Setting row: {row.Index} to {months_stored} for {year}, monthly sale value: {monthly_sale_value}')
-                        inventory_carryover = 0
-                        inventory_utilized = 0
-                        sales_carryover = sales_difference
-                        indexer += 1
-                
-                elif (inventory_carryover != 0) and (sales_carryover == 0):
-                    print(f"entered the loop with inventory carryover non-zero inventory_carryover: {inventory_carryover}, sales_carryover: {sales_carryover}, sale_value: {sale_value}, monthly_sale_value: {monthly_sale_value}")
-                    take_value = min(sale_value, inventory_carryover) #(50, 44)
-                    sales_difference = sale_value - take_value #6 = 50 - 44
-                    inventory_difference = inventory_carryover - take_value #0 = 44 - 44
-                    
-                    if sales_difference == 0:
-                        #more inventory than sales
-                        print(f'SALES LOOP FOR TEST: entering loop with {sales_plan_cols.index(sal_col)}, sales: {sale_value}, row: {row.Index} and {col} - indexer: {indexer}')
-                        months_stored += sale_value/(monthly_sale_value) # should be 12 months
-                        inventory_carryover = inventory_difference
-                        print(f"{inventory_carryover} inventory, months_stored: {months_stored}")
-                        break
-                    
-                    if inventory_difference == 0:
-                        #more sales than inventory
-                        print("inventory difference is 0")
-                        print(f"row: {row.Index}, sale col: {sal_col}, months_stored: {months_stored}, inventory_carryover: {inventory_carryover}, sales_carryover: {sales_carryover}, monthly_sale_value: {monthly_sale_value}")
-                        result = int(months_stored + (inventory_carryover/(monthly_sale_value)))
-                        df.loc[row.Index, f'Runout_Months_{year}'] = result
-                        inventory_carryover = 0
-                        months_stored = 0
-                        sales_carryover = sales_difference
-                        print(f'Setting row: {row.Index} to {result} months for {year}, monthly sale value: {monthly_sale_value}, sales_carryover: {sales_carryover}')
-                        indexer += 1
-                        
-display.display(df)
-
-
-# %%
-
-df.fillna(0,inplace=True)
-# print(f'total_sales: {total_sales}')
-# print(f'total_inventory: {total_inventory}')
-#Todo:   
-# Verify math on other columns. - done - appears to be working
-#create total sales and total inventory columns.
-#figure out how to step down the balances from the total differential
-#load columns back in for extra columns created above but hidden now.
-#Create the balance of years logic.
-print("GENERATING RUNOUT COLUMNS")
-#generates runout calculations and ideal release dates
-for col in inv_plan_cols:
-    index = df.columns.get_loc(col)
-    year = create_year_string(col)
-    year_start = (int(year)) + 1# Extract the year from the column name
-    
-    move_col_name = f'Runout_Months_{year}'
-    move_col = df.pop(move_col_name)
-    df.insert(index + 1, f'Runout_Months_{year}', move_col)
-    
-    
-    start_year_string = f"{year_start}-01-01"
-    # generate the ideal runout name
-    
-    #convert the start year string to a datetime object
-    start_date = pd.to_datetime(start_year_string)
-    #calculate the ideal release date
-    ideal_release_pre = (start_date + df['Month_add'].apply(lambda x: DateOffset(months=x)))
-    ideal_release = pd.to_datetime(ideal_release_pre, errors='coerce')
-    ideal_runout = ideal_release + pd.DateOffset(months=12)
-    df.insert(df.columns.get_loc(col)+1, f'Ideal_Release_{year}', ideal_release) #Can extract year with .year
-    df.insert(df.columns.get_loc(col)+2, f'Ideal_Runout_{year}', ideal_runout)
-    
-
-# pd.DateOffset inside of Math_actual is to simulate an ideal runout of the last year.
-    if year == inv_first_col_year:
-        check_result = df['Current_date'] + df[f'Runout_Months_{year}'].apply(lambda x: DateOffset(months=x))
-        actual_runout = pd.to_datetime(check_result, errors='coerce')
-        df.insert(df.columns.get_loc(f'Runout_Months_{year}')+1, f'Actual_Runout_{year}', actual_runout) #Can extract year with .year
-        off_ideal_math = (((df['Actual_Runout_' + str(int(year))] - df['Ideal_Runout_' + str(int(year))])/np.timedelta64(1, 'D'))/30).astype(int)
-        df.insert(df.columns.get_loc(f'Actual_Runout_{year}')+1, f'Off_Ideal_{year}', off_ideal_math)
-    
-    elif year < inv_last_col_year:
-        check_result = pd.to_datetime(df['Actual_Runout_' + str(int(year) - 1)]) + df[f'Runout_Months_{year}'].apply(lambda x: DateOffset(months=x))
-        actual_runout = pd.to_datetime(check_result, errors='coerce')
-        df.insert(df.columns.get_loc(f'Runout_Months_{year}')+1, f'Actual_Runout_{year}', actual_runout) #Can extract year with .year
-        off_ideal_math = (((df['Actual_Runout_' + str(int(year))] - df['Ideal_Runout_' + str(int(year))])/np.timedelta64(1, 'D'))/30).astype(int)
-        df.insert(df.columns.get_loc(f'Actual_Runout_{year}')+1, f'Off_Ideal_{year}', off_ideal_math)
-
-    if year == inv_last_col_year:
-        check_result = pd.to_datetime(df['Actual_Runout_' + str(int(year) - 1)]) + df[f'Runout_Months_{year}'].apply(lambda x: DateOffset(months=x))
-        actual_runout = pd.to_datetime(check_result, errors='coerce')
-        actual_runout_month = actual_runout.dt.month
-        actual_runout_year = actual_runout.dt.year
-        
-        df.insert(df.columns.get_loc(f'Runout_Months_{year}')+1, f'Actual_Runout_{year}', actual_runout) #Can extract year with .year
-        off_ideal_math = (((df['Actual_Runout_' + str(int(year))] - df['Ideal_Runout_' + str(int(year))])/np.timedelta64(1, 'D'))/30).astype(int)
-        df.insert(df.columns.get_loc(f'Actual_Runout_{year}')+1, f'Off_Ideal_{year}', off_ideal_math)        
-
-
-
-display.display(df)
-
-
-# %%
-#Generates new columns for future bulk need
-
-off_ideal = [col for col in df.columns if col.startswith("Off_Ideal_")]
-actual_runout = [col for col in df.columns if col.startswith("Actual_Runout_")]
-off_ideal_cols = [col for col in df.columns if col.startswith("Off_Ideal_")]
-
-
-
+#Main Loop - handles different statuses and calculates future bulk needs
 for row in df.itertuples():
     starting_year = inv_last_col_year
     market_off = getattr(row, 'market_off_ideal')
     status_info = getattr(row, f'Status')
-    # market_odd_divide_4 = market_off/4
     
+    # ===== HANDLE DTC AND Active_NV ITEMS =====
+    if status_info in ["DTC", "Active_NV"]:
+        # For DTC and Active_NV, simply copy Sales_Plan to Future_Bulk
+        for sales_col in sales_plan_cols:
+            year = create_year_string(sales_col)
+            sales_val = getattr(row, sales_col, 0)
+            
+            # Only process if the sales value exists and is not zero
+            if sales_val > 0:
+                df.loc[row.Index, f'Future_Bulk_{year}'] = int(sales_val)
+                df.loc[row.Index, f'Future_Sale_Base_{year}'] = int(sales_val)
+                df.loc[row.Index, f'Inventory_Target_{year}'] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
+            else:
+                # If sales plan is 0 or doesn't exist, set to 0
+                df.loc[row.Index, f'Future_Bulk_{year}'] = 0
+                df.loc[row.Index, f'Future_Sale_Base_{year}'] = 0
+                df.loc[row.Index, f'Inventory_Target_{year}'] = 0
+        
+        # Skip all the complex logic below and move to next row
+        continue
     
+    # ===== HANDLE DISCONTINUED ITEMS =====
+    if status_info == "Discontinued":
+        # Set all future columns to 0 for discontinued items
+        for sales_col in sales_plan_cols:
+            year = create_year_string(sales_col)
+            df.loc[row.Index, f'Future_Bulk_{year}'] = 0
+            df.loc[row.Index, f'Future_Sale_Base_{year}'] = 0
+            df.loc[row.Index, f'Inventory_Target_{year}'] = 0
+        continue
+    
+    # ===== ORIGINAL LOGIC FOR "Active" STATUS CONTINUES BELOW =====
     runout_last_year = actual_runout[-1]
     runout_months_last = off_ideal[-1]
     runout_date_value = getattr(row, runout_last_year)
@@ -356,6 +185,7 @@ for row in df.itertuples():
     # print(f'partial_production: {partial_production}')
     x = 1
     sales_index_start = sales_plan_cols.index(f'Sales_Plan_{runout_date_value.year}')
+    
     for sales_col in sales_plan_cols[sales_index_start:]:
         # print(f'Item: {row.description} Sales Column reference: {sales_col}')
         sales_val = getattr(row, sales_col)
@@ -364,108 +194,101 @@ for row in df.itertuples():
         # print(f'Sales per Month: {sales_val_per_month}')
         
         if product_plan_value == "Cascade":
-            if status_info == ("Discontinued" | "DTC"):
-                df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int(0)
-                df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(0)
-                df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(0)
-                # print(f'cascade Create mod skip year: Setting result to: {result}')
-            else:
-                for i in range(0,7)[x:]:
-                    if create_mod_skip_year != 0:
-                        # print(f'Future_Sales_' + str(int(starting_year) + i))
-                        # print(sales_val)
-                        # print(f'cascade create_mod_skip_year {create_mod_skip_year}')
-                        result = sales_val * 0.5
+            for i in range(0,7)[x:]:
+                if create_mod_skip_year != 0:
+                    # print(f'Future_Sales_' + str(int(starting_year) + i))
+                    # print(sales_val)
+                    # print(f'cascade create_mod_skip_year {create_mod_skip_year}')
+                    result = sales_val * 0.5
+                    df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
+                    df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
+                    df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
+                    # print(f'cascade Create mod skip year: Setting result to: {result}')
+                    result = None
+                    create_mod_skip_year -= 1
+                    x += 1
+                
+                elif (create_mod_skip_year == 0) and (create_mod_partial_year != 0):
+                    # print(f'Future_Sales_' + str(int(starting_year) + i))
+                    # print(f'create_mod_partial {create_mod_partial_year}')
+                    result = sales_val * partial_production
+                    four_month_check = sales_val * 0.3333
+                    if result < four_month_check:
                         df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
                         df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
-                        df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
-                        # print(f'cascade Create mod skip year: Setting result to: {result}')
-                        result = None
-                        create_mod_skip_year -= 1
-                        x += 1
-                    
-                    elif (create_mod_skip_year == 0) and (create_mod_partial_year != 0):
-                        # print(f'Future_Sales_' + str(int(starting_year) + i))
-                        # print(f'create_mod_partial {create_mod_partial_year}')
-                        result = sales_val * partial_production
-                        four_month_check = sales_val * 0.3333
-                        if result < four_month_check:
-                            df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
-                            df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
-                            df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = four_month_check
-                            # print(f'Create mod skip year: Setting result to: Four Months: {four_month_check}')
-                        else:
-                            df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
-                            df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
-                            df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
-                            # print(f'Create mod skip year: Setting result to: Sales*Partial: {result}')
-                        sales_index_start +=1
-                        create_mod_partial_year = 0
-                        result = None
-                        x +=1
-                        
-                        break
+                        df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = four_month_check
+                        # print(f'Create mod skip year: Setting result to: Four Months: {four_month_check}')
                     else:
-                        # (create_mod_partial_year == 0) and (create_mod_skip_year == 0):
-                        # print(f'Future_Sales_' + str(int(starting_year) + i))
-                        # print(sales_val)
-                        result = sales_val
                         df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
                         df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
                         df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
-                        # print(f'Create mod skip year: Setting result to: {result}')
-                        result = None
-                        sales_index_start += 1
-                        x += 1
-                        break
-            if product_plan_value == "Off_Ideal":
-                for i in range(0,7)[x:]:
-                    if (create_mod_skip_year != 0) and (runout_months_value >= market_off):
-                        # print(f'Future_Sales_' + str(int(starting_year) + i))
-                        # print(sales_val)
-                        # print(f'off-ideal_skip_year {create_mod_skip_year}')
-                        percent_add_on = (create_mod_skip_year * .25) * sales_val
-                        # print(f'percent_add_on: {percent_add_on}')
-                        result = sales_val + percent_add_on
-                        df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
-                        df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
-                        df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
-                        # print(f'off-ideal Create mod skip year: Setting result to: {result}')
-                        result = None
-                        create_mod_skip_year -= 1
-                        x += 1
+                        # print(f'Create mod skip year: Setting result to: Sales*Partial: {result}')
+                    sales_index_start +=1
+                    create_mod_partial_year = 0
+                    result = None
+                    x +=1
                     
-                    # elif (create_mod_skip_year == 0) and (create_mod_partial_year != 0):
-                    #     print(f'Future_Sales_' + str(int(starting_year) + i))
-                    #     print(f'create_mod_partial {create_mod_partial_year}')
-                    #     result = sales_val * partial_production
-                    #     four_month_check = sales_val * 0.3333
-                    #     if result < four_month_check:
-                    #         df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = four_month_check
-                    #         print(f'Create mod skip year: Setting result to: Four Months: {four_month_check}')
-                    #     else:
-                    #         df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
-                    #         print(f'Create mod skip year: Setting result to: Sales*Partial: {result}')
-                    #     sales_index_start +=1
-                    #     create_mod_partial_year = 0
-                    #     result = None
-                    #     x +=1
-                        
-                    #     break
-                    else:
-                        # print(f'Future_Sales_' + str(int(starting_year) + i))
-                        # print(sales_val)
-                        result = sales_val
-                        df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
-                        df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
-                        df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
-                        # print(f'off-ideal-check - Create mod skip year: Setting result to: {result}')
-                        result = None
-                        sales_index_start += 1
-                        x += 1
-                        break
+                    break
+                else:
+                    # (create_mod_partial_year == 0) and (create_mod_skip_year == 0):
+                    # print(f'Future_Sales_' + str(int(starting_year) + i))
+                    # print(sales_val)
+                    result = sales_val
+                    df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
+                    df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
+                    df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
+                    # print(f'Create mod skip year: Setting result to: {result}')
+                    result = None
+                    sales_index_start += 1
+                    x += 1
+                    break
+        
+        if product_plan_value == "Off_Ideal":
+            for i in range(0,7)[x:]:
+                if (create_mod_skip_year != 0) and (runout_months_value >= market_off):
+                    # print(f'Future_Sales_' + str(int(starting_year) + i))
+                    # print(sales_val)
+                    # print(f'off-ideal_skip_year {create_mod_skip_year}')
+                    percent_add_on = (create_mod_skip_year * .25) * sales_val
+                    # print(f'percent_add_on: {percent_add_on}')
+                    result = sales_val + percent_add_on
+                    df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
+                    df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
+                    df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
+                    # print(f'off-ideal Create mod skip year: Setting result to: {result}')
+                    result = None
+                    create_mod_skip_year -= 1
+                    x += 1
+                
+                # elif (create_mod_skip_year == 0) and (create_mod_partial_year != 0):
+                #     print(f'Future_Sales_' + str(int(starting_year) + i))
+                #     print(f'create_mod_partial {create_mod_partial_year}')
+                #     result = sales_val * partial_production
+                #     four_month_check = sales_val * 0.3333
+                #     if result < four_month_check:
+                #         df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = four_month_check
+                #         print(f'Create mod skip year: Setting result to: Four Months: {four_month_check}')
+                #     else:
+                #         df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
+                #         print(f'Create mod skip year: Setting result to: Sales*Partial: {result}')
+                #     sales_index_start +=1
+                #     create_mod_partial_year = 0
+                #     result = None
+                #     x +=1
                     
-
+                #     break
+                else:
+                    # print(f'Future_Sales_' + str(int(starting_year) + i))
+                    # print(sales_val)
+                    result = sales_val
+                    df.loc[row.Index, f'Inventory_Target_' + str(int(starting_year) + i)] = int((int(sales_val) * 0.5) + (int(sales_val) * 0.16))
+                    df.loc[row.Index, f'Future_Sale_Base_' + str(int(starting_year) + i)] = int(sales_val)
+                    df.loc[row.Index, f'Future_Bulk_' + str(int(starting_year) + i)] = int(result)
+                    # print(f'off-ideal-check - Create mod skip year: Setting result to: {result}')
+                    result = None
+                    sales_index_start += 1
+                    x += 1
+                    break
 # Identify all future bulk years from column names
 def calculate_runout_release_and_graph(df, current_year):
     future_years = sorted([
